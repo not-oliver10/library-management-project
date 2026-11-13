@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf, spine, availability, pager %}
+{% block title %}Books{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Books</h1>
+      <p class="lede">
+        {{ pagination.total }} {{ 'title' if pagination.total == 1 else 'titles' }}{% if q %} matching “{{ q }}”. <a href="{{ url_for('books.index') }}">Clear search</a>{% endif %}
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('books.import_books') }}">Import from Frappe</a>
+      <a class="btn btn-primary" href="{{ url_for('books.create') }}">Add book</a>
+    </div>
+  </div>
+
+  {% if pagination.items %}
+    <div class="table-wrap">
+      <table class="stack-sm">
+        <thead>
+          <tr>
+            <th scope="col">Book</th>
+            <th scope="col" class="hide-sm">ISBN</th>
+            <th scope="col">On the shelf</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for book in pagination.items %}
+            <tr>
+              <td>
+                <div class="book-cell">
+                  {{ spine(book.id) }}
+                  <div>
+                    <div class="book-title">{{ book.title }}</div>
+                    <div class="muted">{{ book.author }}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="hide-sm num">{{ book.isbn }}</td>
+              <td>{{ availability(book) }}</td>
+              <td class="row-actions">
+                {% if book.borrow_stock > 0 %}
+                  <a class="btn btn-sm" href="{{ url_for('main.desk', book=book.id) }}#issue-book">Issue</a>
+                {% endif %}
+                <a class="btn btn-sm" href="{{ url_for('books.edit', book_id=book.id) }}">Edit</a>
+                <form class="inline" method="post" action="{{ url_for('books.delete', book_id=book.id) }}"
+                      data-confirm="Delete “{{ book.title }}” from the catalog? This can’t be undone."
+                      data-confirm-label="Delete book">
+                  {{ csrf() }}
+                  <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ pager(pagination, 'books.index', q=q) }}
+  {% elif q %}
+    <div class="empty">
+      <h2>No books match “{{ q }}”</h2>
+      <p class="muted">Check the spelling, or search for part of the title, the author or the ISBN.</p>
+      <div class="actions">
+        <a class="btn" href="{{ url_for('books.index') }}">Show all books</a>
+        <a class="btn btn-primary" href="{{ url_for('books.import_books') }}">Import from Frappe</a>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty">
+      <h2>The catalog is empty</h2>
+      <p class="muted">Add books one at a time, or import a batch from the Frappe library.</p>
+      <div class="actions">
+        <a class="btn" href="{{ url_for('books.import_books') }}">Import from Frappe</a>
+        <a class="btn btn-primary" href="{{ url_for('books.create') }}">Add book</a>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

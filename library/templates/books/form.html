@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf, text_field %}
+{% block title %}{{ 'Edit book' if book else 'Add book' }}{% endblock %}
+
+{% block content %}
+  <div class="form-page">
+    <div class="page-head">
+      <div>
+        <h1>{{ 'Edit book' if book else 'Add a book' }}</h1>
+        {% if book %}<p class="lede">{{ book.loans|length }} {{ 'copy is' if book.loans|length == 1 else 'copies are' }} out on loan right now.</p>{% endif %}
+      </div>
+    </div>
+
+    <form method="post" novalidate>
+      {{ csrf() }}
+      {{ text_field(form.title, 'Title', autofocus=True) }}
+      {{ text_field(form.author, 'Author') }}
+      {{ text_field(form.isbn, 'ISBN', inputmode='numeric') }}
+      {{ text_field(form.stock, 'Total copies', hint='How many copies the library owns, including any out on loan.', inputmode='numeric') }}
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">{{ 'Save changes' if book else 'Add book' }}</button>
+        <a class="btn btn-quiet" href="{{ url_for('books.index') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

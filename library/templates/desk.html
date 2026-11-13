@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf, ledger %}
+{% block title %}Desk{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Circulation desk</h1>
+      <p class="lede">Issue books to members and take them back.</p>
+    </div>
+    <dl class="figures">
+      <div><dt>Titles</dt><dd>{{ stats.titles }}</dd></div>
+      <div><dt>On the shelf</dt><dd>{{ stats.on_shelf }}</dd></div>
+      <div><dt>Out on loan</dt><dd>{{ stats.on_loan }}</dd></div>
+      <div><dt>Members</dt><dd>{{ stats.members }}</dd></div>
+      <div><dt>Owed to the library</dt><dd>{{ stats.dues|money }}</dd></div>
+    </dl>
+  </div>
+
+  <div class="desk-grid">
+    <section class="panel" aria-labelledby="issue-heading">
+      <h2 id="issue-heading">Issue a book</h2>
+      <p class="muted">Each book issued adds a fee of {{ config.BORROW_FEE|money }} to what the member owes.</p>
+
+      {% if not books %}
+        <p>No copies are on the shelf. <a href="{{ url_for('books.create') }}">Add a book</a> or <a href="{{ url_for('books.import_books') }}">import some</a>.</p>
+      {% elif not members %}
+        <p>No member can borrow right now. <a href="{{ url_for('members.create') }}">Add a member</a> or collect payments on the <a href="{{ url_for('members.index') }}">Members page</a>.</p>
+      {% else %}
+        <form method="post" action="{{ url_for('transactions.issue') }}">
+          {{ csrf() }}
+          <div class="field">
+            <label for="issue-book">Book</label>
+            <select id="issue-book" name="book_id" required>
+              <option value="">Choose a book</option>
+              {% for book in books %}
+                <option value="{{ book.id }}"{% if book.id == selected_book %} selected{% endif %}>{{ book.title }} by {{ book.author }} ({{ book.borrow_stock }} left)</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="issue-member">Member</label>
+            <select id="issue-member" name="member_id" required>
+              <option value="">Choose a member</option>
+              {% for member in members %}
+                <option value="{{ member.id }}"{% if member.id == selected_member %} selected{% endif %}>{{ member.name }} ({{ member.member_name }})</option>
+              {% endfor %}
+            </select>
+            {% if blocked_count %}
+              <p class="hint">{{ blocked_count }} {{ 'member owes' if blocked_count == 1 else 'members owe' }} {{ config.DEBT_LIMIT|money }} or more and {{ 'isn’t' if blocked_count == 1 else 'aren’t' }} listed. <a href="{{ url_for('members.index') }}">See members</a></p>
+            {% endif %}
+          </div>
+          <button class="btn btn-primary" type="submit">Issue book</button>
+        </form>
+      {% endif %}
+    </section>
+
+    <section class="panel" aria-labelledby="return-heading">
+      <h2 id="return-heading">Return a book</h2>
+      <p class="muted">Pick the loan. The member’s fee can be collected now or left on their balance.</p>
+
+      {% if not loans %}
+        <p>Nothing is out on loan.</p>
+      {% else %}
+        <form method="post" action="{{ url_for('transactions.return_book') }}">
+          {{ csrf() }}
+          <div class="field">
+            <label for="return-loan">Book on loan</label>
+            <select id="return-loan" name="loan_id" required>
+              <option value="">Choose a book to return</option>
+              {% for loan in loans %}
+                <option value="{{ loan.id }}"{% if loan.id == selected_loan %} selected{% endif %}>{{ loan.book.title }} (with {{ loan.member.member_name }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <label class="check"><input type="checkbox" name="paid"> The member is paying the {{ config.BORROW_FEE|money }} fee now</label>
+          <button class="btn btn-primary" type="submit">Return book</button>
+        </form>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="section-head">
+    <h2>Recent activity</h2>
+    {% if recent %}<a href="{{ url_for('transactions.index') }}">All transactions</a>{% endif %}
+  </div>
+  {% if recent %}
+    {{ ledger(recent) }}
+  {% else %}
+    <div class="empty">
+      <h2>Nothing has happened yet</h2>
+      <p class="muted">Issued books, returns and payments will be listed here.</p>
+    </div>
+  {% endif %}
+{% endblock %}

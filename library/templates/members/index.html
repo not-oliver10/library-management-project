@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf, pager %}
+{% block title %}Members{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Members</h1>
+      <p class="lede">{{ pagination.total }} {{ 'member' if pagination.total == 1 else 'members' }}{% if q %} matching “{{ q }}”. <a href="{{ url_for('members.index') }}">Clear search</a>{% endif %}</p>
+      <p class="lede">Members who owe {{ config.DEBT_LIMIT|money }} or more can’t borrow until they pay.</p>
+    </div>
+    <div class="actions">
+      <a class="btn btn-primary" href="{{ url_for('members.create') }}">Add member</a>
+    </div>
+  </div>
+
+  <form class="filter" method="get" action="{{ url_for('members.index') }}" role="search">
+    <label class="sr-only" for="member-filter">Search members</label>
+    <input id="member-filter" type="search" name="q" value="{{ q }}" placeholder="Name, username or phone number">
+    <button class="btn" type="submit">Search</button>
+  </form>
+
+  {% if pagination.items %}
+    <div class="table-wrap">
+      <table class="stack-sm">
+        <thead>
+          <tr>
+            <th scope="col">Member</th>
+            <th scope="col" class="hide-sm">Phone</th>
+            <th scope="col">Books out</th>
+            <th scope="col">Owes</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for member in pagination.items %}
+            {% set at_limit = member.to_pay >= config.DEBT_LIMIT %}
+            <tr>
+              <td>
+                <div class="book-title">{{ member.name }}</div>
+                <div class="muted">{{ member.member_name }}</div>
+              </td>
+              <td class="hide-sm num">{{ member.phone_number }}</td>
+              <td class="num" data-label="Books out:">{{ member.loans|length }}</td>
+              <td class="num" data-label="Owes:">
+                {{ member.to_pay|money }}
+                {% if at_limit %}<span class="badge badge-stamp">At limit</span>{% endif %}
+              </td>
+              <td class="row-actions">
+                {% if not at_limit %}
+                  <a class="btn btn-sm" href="{{ url_for('main.desk', member=member.id) }}#issue-book">Issue</a>
+                {% endif %}
+                {% if member.to_pay > 0 %}
+                  <button class="btn btn-sm" type="button"
+                          data-pay-action="{{ url_for('members.pay', member_id=member.id) }}"
+                          data-pay-name="{{ member.name }}"
+                          data-pay-due="{{ member.to_pay }}"
+                          data-pay-due-text="{{ member.to_pay|money }}">Record payment</button>
+                {% endif %}
+                <a class="btn btn-sm" href="{{ url_for('members.edit', member_id=member.id) }}">Edit</a>
+                <form class="inline" method="post" action="{{ url_for('members.delete', member_id=member.id) }}"
+                      data-confirm="Delete {{ member.name }}? Their past transactions stay in the ledger."
+                      data-confirm-label="Delete member">
+                  {{ csrf() }}
+                  <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ pager(pagination, 'members.index', q=q) }}
+  {% elif q %}
+    <div class="empty">
+      <h2>No members match “{{ q }}”</h2>
+      <p class="muted">Try part of the name, the username or the phone number.</p>
+      <div class="actions"><a class="btn" href="{{ url_for('members.index') }}">Show all members</a></div>
+    </div>
+  {% else %}
+    <div class="empty">
+      <h2>No members yet</h2>
+      <p class="muted">Add the people who will borrow books.</p>
+      <div class="actions"><a class="btn btn-primary" href="{{ url_for('members.create') }}">Add member</a></div>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block dialogs %}
+  <dialog id="pay-dialog" aria-labelledby="pay-title">
+    <form method="post">
+      <div class="dialog-body">
+        {{ csrf() }}
+        <h2 id="pay-title">Record a payment</h2>
+        <p class="muted" data-pay-summary></p>
+        <div class="field">
+          <label for="pay-amount">Amount received</label>
+          <input id="pay-amount" name="amount" type="number" min="1" step="1" inputmode="numeric" required>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Record payment</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+{% endblock %}
