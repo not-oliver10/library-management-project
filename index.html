@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spectrum Analyzer – live microphone</title>
+<meta name="description" content="See your microphone’s sound as a live frequency spectrum and spectrogram. Runs entirely in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e6ebee;--ink:#0e1b2b;--ink2:#4a5b6e;--panel:#0e1b2b;--line:#1f3147;--dim:#8aa0b8;--teal:#3dd6c6;--amber:#ffb84d}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;color:var(--ink);font:400 16px/1.55 Figtree,system-ui,sans-serif;padding:clamp(16px,4vw,48px)}
+.wrap{max-width:1120px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+h1{font:700 clamp(2.2rem,5.5vw,3.8rem)/1 'Bricolage Grotesque',Figtree,sans-serif;letter-spacing:-.035em;margin:0 0 12px}
+.lede{max-width:52ch;margin:0;color:var(--ink2)}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:#fff;border:1px solid #cfd8df;font-weight:600;font-size:.875rem}
+.dot{width:9px;height:9px;border-radius:50%;background:#9aa8b6}
+.pill.on .dot{background:var(--teal);box-shadow:0 0 0 4px rgba(61,214,198,.3)}
+.panel{background:var(--panel);color:#dbe6f2;border-radius:24px;padding:clamp(14px,2.5vw,24px)}
+.stats{display:flex;gap:clamp(20px,5vw,56px);flex-wrap:wrap;margin-bottom:14px}
+.stat span{display:block;font-size:.8rem;color:var(--dim)}
+.stat b{display:block;font:500 clamp(1.6rem,3.5vw,2.4rem)/1.15 'Bricolage Grotesque',Figtree,sans-serif;min-width:7ch;font-variant-numeric:tabular-nums}
+.stage{position:relative}
+canvas{display:block;width:100%}
+#spec{height:clamp(260px,44vh,420px);cursor:crosshair}
+#wf{height:150px;margin-top:6px;border-radius:10px}
+.cap{font-size:.8rem;color:var(--dim);margin:8px 0 0}
+.overlay{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;text-align:center;padding:16px;background:rgba(14,27,43,.78);border-radius:10px}
+.overlay[hidden]{display:none}
+.overlay p{margin:0;max-width:40ch;color:#b9c9db}
+#err{color:#ffb3c1;font-weight:600}
+button,select{font:600 .9rem Figtree,system-ui,sans-serif;color:inherit}
+.btn{border:1px solid #2b4260;background:transparent;color:#dbe6f2;padding:9px 16px;border-radius:999px;cursor:pointer}
+.btn:hover{background:#17283d}
+.btn[aria-pressed=true]{background:#dbe6f2;color:var(--ink);border-color:#dbe6f2}
+.btn.primary{background:linear-gradient(90deg,#3dd6c6,#8fb4ff);color:#07111d;border:0}
+.btn.primary:hover{filter:brightness(1.08)}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.controls{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.grp{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--dim)}
+select{background:#13233a;border:1px solid #2b4260;border-radius:10px;padding:8px 10px;color:#dbe6f2}
+input[type=range]{accent-color:var(--teal);width:120px}
+.explain{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:32px;margin-top:40px}
+.explain div{border-top:1px solid #b3c0cb;padding-top:14px}
+.explain h2{font:700 1.2rem/1.2 'Bricolage Grotesque',Figtree,sans-serif;letter-spacing:-.01em;margin:0 0 6px}
+.explain p{margin:0;color:var(--ink2);max-width:42ch}
+footer{margin-top:40px;font-size:.85rem;color:var(--ink2)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Spectrum analyzer</h1>
+      <p class="lede">See your microphone’s sound as it happens, split into low, mid and high frequencies. Everything runs in your browser; no audio is uploaded.</p>
+    </div>
+    <div class="pill" id="pill"><i class="dot"></i><span id="status">Microphone off</span></div>
+  </header>
+
+  <main class="panel">
+    <div class="stats">
+      <div class="stat"><span>Peak frequency</span><b id="sf">—</b></div>
+      <div class="stat"><span>Closest note</span><b id="sn">—</b></div>
+      <div class="stat"><span>Level</span><b id="sl">—</b></div>
+    </div>
+
+    <div class="stage" id="stage">
+      <canvas id="spec" role="img" aria-label="Live frequency spectrum of the microphone, 20 hertz to 20 kilohertz"></canvas>
+      <canvas id="wf" role="img" aria-label="Spectrogram: frequency over time, newest at the top"></canvas>
+      <div class="overlay" id="overlay">
+        <p>Your browser will ask for microphone access when you start.</p>
+        <button class="btn primary" id="go">Start microphone</button>
+        <p id="err" role="alert"></p>
+      </div>
+    </div>
+    <p class="cap">Spectrogram: brighter means louder. Newest sound is at the top.</p>
+
+    <div class="controls">
+      <button class="btn primary" id="toggle">Start microphone</button>
+      <div class="grp" role="group" aria-label="View">
+        <button class="btn" id="vBars" aria-pressed="true">Bars</button>
+        <button class="btn" id="vLine" aria-pressed="false">Line</button>
+      </div>
+      <button class="btn" id="hold" aria-pressed="true">Peak hold</button>
+      <button class="btn" id="freeze" aria-pressed="false">Freeze</button>
+      <label class="grp">Detail
+        <select id="fft">
+          <option value="2048">Fast</option>
+          <option value="4096">Balanced</option>
+          <option value="8192" selected>Fine</option>
+          <option value="16384">Finest</option>
+        </select>
+      </label>
+      <label class="grp">Smoothing
+        <input type="range" id="smooth" min="0" max="0.95" step="0.05" value="0.7">
+      </label>
+    </div>
+  </main>
+
+  <section class="explain" aria-label="How to read the analyzer">
+    <div><h2>Left to right is pitch</h2><p>Low rumbles sit on the left, hiss and sibilance on the right. The scale is logarithmic, so every octave gets the same width.</p></div>
+    <div><h2>Height is loudness</h2><p>A taller bar means more energy at that pitch, measured in decibels relative to full scale. Silence sits at the bottom.</p></div>
+    <div><h2>Try a few sounds</h2><p>Whistle for one sharp peak, hum for a stack of evenly spaced harmonics, clap for a burst across the whole range.</p></div>
+  </section>
+  <footer>Needs a secure (HTTPS) page and a microphone. Hover the graph to read the frequency under your cursor.</footer>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const spec=$('#spec'),wf=$('#wf'),sc=spec.getContext('2d'),wc=wf.getContext('2d');
+const FMIN=20,FMAX=20000,LR=Math.log(FMAX/FMIN),DMIN=-100,DMAX=-10;
+const NOTES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+let actx,analyser,stream,data,td,binHz=1,running=false,frozen=false,hold=true,mode='bars',dpr=1,L={},mx=null,fr=0,lastN=0;
+const peaks=new Float32Array(2048).fill(-140);
+let vals=new Float32Array(0);
+
+/* colour map for the spectrogram */
+const stops=[[0,[11,21,34]],[.25,[40,36,120]],[.5,[124,92,255]],[.75,[255,107,138]],[1,[255,232,160]]];
+const LUT=Array.from({length:256},(_,i)=>{const t=i/255;let k=1;while(k<stops.length-1&&t>stops[k][0])k++;
+  const [a,ca]=stops[k-1],[b,cb]=stops[k],u=(t-a)/(b-a);return ca.map((v,j)=>Math.round(v+(cb[j]-v)*u))});
+
+function size(){
+  dpr=Math.min(devicePixelRatio||1,2);
+  for(const c of [spec,wf]){const r=c.getBoundingClientRect();c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr)}
+  const pl=Math.round(40*dpr),pr=Math.round(8*dpr),pt=Math.round(8*dpr),pb=Math.round(24*dpr);
+  L={pl,pr,pt,pb,pw:spec.width-pl-pr,ph:spec.height-pt-pb};
+  wc.fillStyle='#0b1522';wc.fillRect(0,0,wf.width,wf.height);
+}
+new ResizeObserver(size).observe($('#stage'));size();
+
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const xOf=f=>L.pl+L.pw*Math.log(f/FMIN)/LR;
+const yOf=db=>L.pt+L.ph*(1-clamp((db-DMIN)/(DMAX-DMIN),0,1));
+const fmtF=f=>f>=1000?(f/1000).toFixed(f>=10000?1:2).replace(/\.?0+$/,'')+' kHz':Math.round(f)+' Hz';
+
+/* strongest value between two frequencies (interpolated when narrower than one bin) */
+function band(fa,fb){
+  const a=fa/binHz,b=fb/binHz;
+  if(b-a<1){const m=(a+b)/2,i=Math.floor(m),t=m-i,x=data[i]??-140,y=data[i+1]??x;return x+(y-x)*t}
+  let m=-140;for(let i=Math.ceil(a),e=Math.min(Math.floor(b),data.length-1);i<=e;i++)if(data[i]>m)m=data[i];return m;
+}
+
+function pushWaterfall(){
+  const W=wf.width,H=wf.height,{pl,pw}=L;
+  wc.drawImage(wf,0,0,W,H-1,0,1,W,H-1);
+  const img=wc.createImageData(pw,1),px=img.data;
+  for(let x=0;x<pw;x++){
+    const v=band(FMIN*Math.exp(LR*x/pw),FMIN*Math.exp(LR*(x+1)/pw));
+    const c=LUT[Math.round(clamp((v-DMIN)/(DMAX-DMIN),0,1)*255)],o=x*4;
+    px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=255;
+  }
+  wc.putImageData(img,pl,0);
+}
+
+function stats(){
+  const i0=Math.ceil(FMIN/binHz),i1=Math.min(Math.floor(FMAX/binHz),data.length-2);
+  let bi=i0;for(let i=i0;i<=i1;i++)if(data[i]>data[bi])bi=i;
+  if(data[bi]<-90){$('#sf').textContent='—';$('#sn').textContent='—'}
+  else{
+    const a=data[bi-1],b=data[bi],c=data[bi+1],d=a-2*b+c,p=d?0.5*(a-c)/d:0,f=(bi+p)*binHz;
+    const n=69+12*Math.log2(f/440),r=Math.round(n),cents=Math.round((n-r)*100);
+    $('#sf').textContent=fmtF(f);
+    $('#sn').textContent=NOTES[((r%12)+12)%12]+(Math.floor(r/12)-1)+' '+(cents>=0?'+':'')+cents+'¢';
+  }
+  let s=0;for(let i=0;i<td.length;i++)s+=td[i]*td[i];
+  const rms=Math.sqrt(s/td.length);$('#sl').textContent=rms>1e-5?Math.round(20*Math.log10(rms))+' dB':'—';
+}
+
+function draw(){
+  const d=dpr,W=spec.width,H=spec.height,{pl,pr,pt,pb,pw,ph}=L;
+  sc.clearRect(0,0,W,H);
+  sc.font=`${11*d}px Figtree,system-ui,sans-serif`;sc.lineWidth=d;sc.strokeStyle='#1f3147';sc.fillStyle='#8aa0b8';
+  sc.textAlign='right';sc.textBaseline='middle';
+  for(const db of [-20,-40,-60,-80]){const y=Math.round(yOf(db))+.5;sc.beginPath();sc.moveTo(pl,y);sc.lineTo(W-pr,y);sc.stroke();sc.fillText(db,pl-6*d,y)}
+  sc.textBaseline='alphabetic';
+  for(const f of [20,50,100,200,500,1000,2000,5000,10000,20000]){
+    const x=Math.round(xOf(f))+.5;sc.beginPath();sc.moveTo(x,pt);sc.lineTo(x,pt+ph);sc.stroke();
+    sc.textAlign=f===20000?'right':'center';sc.fillText(f>=1000?(f/1000)+'k':f,f===20000?x+4*d:x,H-6*d);
+  }
+  if(running&&data){
+    const bars=mode==='bars',n=bars?Math.max(24,Math.floor(pw/(9*d))):Math.max(64,Math.floor(pw/(2*d)));
+    if(n!==lastN){peaks.fill(-140);lastN=n;vals=new Float32Array(n)}
+    for(let i=0;i<n;i++){
+      const v=band(FMIN*Math.exp(LR*i/n),FMIN*Math.exp(LR*(i+1)/n));vals[i]=v;
+      if(!frozen)peaks[i]=Math.max(v,peaks[i]-.6);
+    }
+    const g=sc.createLinearGradient(0,pt+ph,0,pt);
+    g.addColorStop(0,'#3dd6c6');g.addColorStop(.45,'#7c5cff');g.addColorStop(.75,'#ff6b8a');g.addColorStop(1,'#ffb84d');
+    const base=pt+ph,bw=pw/n;
+    if(bars){
+      const gap=Math.max(1,bw*.22);sc.fillStyle=g;
+      for(let i=0;i<n;i++){const y=yOf(vals[i]);sc.fillRect(pl+i*bw+gap/2,y,bw-gap,base-y)}
+      if(hold){sc.fillStyle='#eaf2fb';for(let i=0;i<n;i++)if(peaks[i]>DMIN)sc.fillRect(pl+i*bw+gap/2,yOf(peaks[i])-2*d,bw-gap,2*d)}
+    }else{
+      sc.beginPath();sc.moveTo(pl,base);
+      for(let i=0;i<n;i++)sc.lineTo(pl+(i+.5)*bw,yOf(vals[i]));
+      sc.lineTo(pl+pw,base);sc.closePath();sc.globalAlpha=.25;sc.fillStyle=g;sc.fill();sc.globalAlpha=1;
+      sc.beginPath();for(let i=0;i<n;i++){const x=pl+(i+.5)*bw,y=yOf(vals[i]);i?sc.lineTo(x,y):sc.moveTo(x,y)}
+      sc.strokeStyle=g;sc.lineWidth=2*d;sc.lineJoin='round';sc.stroke();
+      if(hold){sc.beginPath();for(let i=0;i<n;i++){const x=pl+(i+.5)*bw,y=yOf(peaks[i]);i?sc.lineTo(x,y):sc.moveTo(x,y)}
+        sc.strokeStyle='rgba(234,242,251,.55)';sc.lineWidth=d;sc.stroke()}
+    }
+  }
+  if(mx!==null){
+    const x=mx*d;
+    if(x>=pl&&x<=pl+pw){
+      const f=FMIN*Math.exp(LR*(x-pl)/pw);
+      sc.strokeStyle='rgba(234,242,251,.5)';sc.lineWidth=d;sc.beginPath();sc.moveTo(x,pt);sc.lineTo(x,pt+ph);sc.stroke();
+      let t=fmtF(f);if(running&&data)t+='  ·  '+Math.round(band(f/1.03,f*1.03))+' dB';
+      sc.font=`600 ${12*d}px Figtree,system-ui,sans-serif`;
+      const tw=sc.measureText(t).width+16*d,tx=x+tw+8*d>W-pr?x-tw-6*d:x+6*d;
+      sc.fillStyle='#dbe6f2';sc.beginPath();sc.roundRect(tx,pt+6*d,tw,22*d,6*d);sc.fill();
+      sc.fillStyle='#0e1b2b';sc.textAlign='left';sc.fillText(t,tx+8*d,pt+21*d);
+    }
+  }
+}
+
+function loop(){
+  if(running&&!frozen){
+    analyser.getFloatFrequencyData(data);
+    for(let i=0;i<data.length;i++)if(!(data[i]>-140))data[i]=-140;
+    analyser.getFloatTimeDomainData(td);
+    pushWaterfall();
+    if(++fr%8===0)stats();
+  }
+  draw();requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+function applyFFT(){
+  analyser.fftSize=+$('#fft').value;
+  data=new Float32Array(analyser.frequencyBinCount);td=new Float32Array(analyser.fftSize);
+  binHz=actx.sampleRate/analyser.fftSize;
+}
+function setStatus(on){
+  $('#pill').classList.toggle('on',on);
+  $('#status').textContent=on?`Listening · ${(actx.sampleRate/1000).toString().replace(/\.0+$/,'')} kHz`:'Microphone off';
+  $('#toggle').textContent=on?'Stop microphone':'Start microphone';
+  $('#overlay').hidden=on;
+}
+async function start(){
+  $('#err').textContent='';
+  if(!navigator.mediaDevices?.getUserMedia){$('#err').textContent='This page must be opened over HTTPS to use the microphone.';return}
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})}
+  catch(e){
+    $('#err').textContent=e.name==='NotAllowedError'?'Microphone access was blocked. Allow it in your browser’s site settings, then press Start again.'
+      :e.name==='NotFoundError'?'No microphone found. Connect one and press Start again.':'Could not open the microphone: '+e.message;
+    return;
+  }
+  actx=new (window.AudioContext||window.webkitAudioContext)();
+  analyser=actx.createAnalyser();analyser.smoothingTimeConstant=+$('#smooth').value;
+  actx.createMediaStreamSource(stream).connect(analyser);
+  applyFFT();await actx.resume();
+  running=true;frozen=false;$('#freeze').setAttribute('aria-pressed','false');
+  wc.fillStyle='#0b1522';wc.fillRect(0,0,wf.width,wf.height);setStatus(true);
+}
+function stop(){
+  stream?.getTracks().forEach(t=>t.stop());actx?.close();
+  running=false;setStatus(false);
+  for(const id of ['#sf','#sn','#sl'])$(id).textContent='—';
+}
+const toggle=()=>running?stop():start();
+$('#toggle').onclick=$('#go').onclick=toggle;
+
+function setMode(m){mode=m;lastN=0;$('#vBars').setAttribute('aria-pressed',m==='bars');$('#vLine').setAttribute('aria-pressed',m==='line')}
+$('#vBars').onclick=()=>setMode('bars');$('#vLine').onclick=()=>setMode('line');
+$('#hold').onclick=e=>{hold=!hold;e.currentTarget.setAttribute('aria-pressed',hold);peaks.fill(-140)};
+$('#freeze').onclick=e=>{frozen=!frozen;e.currentTarget.setAttribute('aria-pressed',frozen)};
+$('#fft').onchange=()=>{if(analyser)applyFFT()};
+$('#smooth').oninput=e=>{if(analyser)analyser.smoothingTimeConstant=+e.target.value};
+spec.addEventListener('pointermove',e=>{mx=e.clientX-spec.getBoundingClientRect().left});
+spec.addEventListener('pointerleave',()=>{mx=null});
+</script>
+</body>
+</html>
